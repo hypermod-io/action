@@ -3,11 +3,11 @@ const { exec } = require("child_process");
 
 async function run() {
   try {
-    const { transforms, directories } = JSON.parse(core.getInput("data"));
+    const { transformIds, directories } = JSON.parse(core.getInput("data"));
 
-    console.log("YO", transforms, directories);
+    console.log("YO", transformIds, directories);
     exec(
-      `npx @hypermod/cli -t ${transforms} ${directories}`,
+      `npx @hypermod/cli -t ${transformIds} ${directories}`,
       (error, stdout, stderr) => {
         if (error) {
           core.setFailed(`Error: ${error.message}`);

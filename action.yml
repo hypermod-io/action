@@ -4,18 +4,12 @@ runs:
   using: "node18"
   main: "dist/index.js"
 inputs:
-  eventType:
-    description: 'Event type (CHECK or TRANSFORM)'
+  data:
+    description: "Events dispatched from the Hypermod app as JSON"
     required: true
-  transformIds:
-    description: 'ID for the transform process (comma separated)'
-    required: false
-  directories:
-    description: 'Glob of directories for processing (comma separated)'
-    required: false
 outputs:
   pullRequestNumbers:
-    description: 'The pull request number that was created or updated (comma separated)'
+    description: "The pull request number that was created or updated (comma separated)"
 branding:
   icon: "star"
   color: "black"
