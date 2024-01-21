@@ -2,7 +2,7 @@ name: Hypermod
 description: A GitHub action to perform transformations triggered via the Hypermod App
 runs:
   using: "node20"
-  main: "dist/index.js"
+  main: "index.js"
 inputs:
   data:
     description: "Events dispatched from the Hypermod app as JSON"
