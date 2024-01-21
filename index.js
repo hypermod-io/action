@@ -1,17 +1,14 @@
-const core = require('@actions/core');
-const { exec } = require('child_process');
+const core = require("@actions/core");
+const { exec } = require("child_process");
 
 async function run() {
   try {
-    const eventType = core.getInput('eventType');
-    if (eventType === 'CHECK') {
-      // Handle CHECK event
-      core.setOutput('result', 'Action is installed and operational.');
-    } else if (eventType === 'TRANSFORM') {
-      // Handle TRANSFORM event
-      const transformId = core.getInput('transformId');
-      const directories = core.getInput('directories');
-      exec(`npx @hypermod/cli -t ${transformId} ${directories}`, (error, stdout, stderr) => {
+    const { transforms, directories } = JSON.parse(core.getInput("data"));
+
+    console.log("YO", transforms, directories);
+    exec(
+      `npx @hypermod/cli -t ${transforms} ${directories}`,
+      (error, stdout, stderr) => {
         if (error) {
           core.setFailed(`Error: ${error.message}`);
           return;
@@ -20,11 +17,9 @@ async function run() {
           core.setFailed(`Error: ${stderr}`);
           return;
         }
-        core.setOutput('result', stdout);
-      });
-    } else {
-      core.setFailed('Invalid event type');
-    }
+        core.setOutput("result", stdout);
+      }
+    );
   } catch (error) {
     core.setFailed(`Action failed: ${error.message}`);
   }
