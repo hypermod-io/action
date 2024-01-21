@@ -1,7 +1,7 @@
 name: Hypermod
 description: A GitHub action to perform transformations triggered via the Hypermod App
 runs:
-  using: "node18"
+  using: "node20"
   main: "dist/index.js"
 inputs:
   data:
