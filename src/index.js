@@ -1,11 +1,10 @@
 const core = require("@actions/core");
 const { exec } = require("child_process");
 
-async function run() {
-  try {
+(async () => {
     const { transformIds, directories } = JSON.parse(core.getInput("data"));
 
-    console.log("YO", transformIds, directories);
+    core.info("Fetching and running provided transforms", transformIds, directories);
     exec(
       `npx @hypermod/cli -t ${transformIds} ${directories}`,
       (error, stdout, stderr) => {
@@ -20,7 +19,7 @@ async function run() {
         core.setOutput("result", stdout);
       }
     );
-  } catch (error) {
-    core.setFailed(`Action failed: ${error.message}`);
-  }
-}
+})().catch((err) => {
+  core.error(err);
+  core.setFailed(err.message);
+});
