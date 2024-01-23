@@ -1,14 +1,31 @@
-const fs = require("fs-extra");
-const core = require("@actions/core");
-const { exec, getExecOutput } = require("@actions/exec");
-const { throttling } = require("@octokit/plugin-throttling");
-const { GitHub, getOctokitOptions } = require("@actions/github/lib/utils");
+import fs from "fs-extra";
+import * as core from "@actions/core";
+import * as github from "@actions/github";
+import { exec, getExecOutput } from "@actions/exec";
+import { throttling } from "@octokit/plugin-throttling";
+import { GitHub, getOctokitOptions } from "@actions/github/lib/utils";
 
-const setupOctokit = (githubToken) => {
+const githubToken = process.env.GITHUB_TOKEN!;
+
+import {
+  switchToMaybeExistingBranch,
+  reset,
+  checkIfClean,
+  commitAll,
+  setupUser,
+  push,
+} from "./git";
+
+const setupOctokit = (githubToken: string) => {
   return new (GitHub.plugin(throttling))(
     getOctokitOptions(githubToken, {
       throttle: {
-        onRateLimit: (retryAfter, options, octokit, retryCount) => {
+        onRateLimit: (
+          retryAfter: number,
+          options: { method: string; url: string },
+          _octokit: any,
+          retryCount: number
+        ) => {
           core.warning(
             `Request quota exhausted for request ${options.method} ${options.url}`
           );
@@ -18,7 +35,12 @@ const setupOctokit = (githubToken) => {
             return true;
           }
         },
-        onSecondaryRateLimit: (retryAfter, options, octokit, retryCount) => {
+        onSecondaryRateLimit: (
+          retryAfter: number,
+          options: { method: string; url: string },
+          _octokit: any,
+          retryCount: number
+        ) => {
           core.warning(
             `SecondaryRateLimit detected for request ${options.method} ${options.url}`
           );
@@ -33,7 +55,15 @@ const setupOctokit = (githubToken) => {
   );
 };
 
-async function generatePr() {
+async function generatePr({
+  commitMessage,
+  finalPrTitle,
+  prBody,
+}: {
+  commitMessage: string;
+  finalPrTitle: string;
+  prBody: string;
+}) {
   const repo = `${github.context.repo.owner}/${github.context.repo.repo}`;
   const branch = github.context.ref.replace("refs/heads/", "");
   const transformBranch = `hypermod-transform/hello`;
@@ -43,12 +73,10 @@ async function generatePr() {
 
   // project with `commit: true` setting could have already committed files
   if (!(await checkIfClean())) {
-    const finalCommitMessage = `${commitMessage}${
-      !!preState ? ` (${preState.tag})` : ""
-    }`;
-    await commitAll(finalCommitMessage);
+    await commitAll(commitMessage);
   }
 
+  const octokit = setupOctokit(githubToken);
   const searchQuery = `repo:${repo}+state:open+head:${transformBranch}+base:${branch}+is:pull-request`;
   const searchResultPromise = octokit.rest.search.issuesAndPullRequests({
     q: searchQuery,
@@ -59,21 +87,17 @@ async function generatePr() {
   const searchResult = await searchResultPromise;
   core.info(JSON.stringify(searchResult.data, null, 2));
 
-  const octokit = setupOctokit(githubToken);
-
   if (searchResult.data.items.length === 0) {
     core.info("creating pull request");
     const { data: newPullRequest } = await octokit.rest.pulls.create({
       base: branch,
-      head: versionBranch,
+      head: transformBranch,
       title: finalPrTitle,
       body: prBody,
       ...github.context.repo,
     });
 
-    return {
-      pullRequestNumber: newPullRequest.number,
-    };
+    return newPullRequest.number;
   } else {
     const [pullRequest] = searchResult.data.items;
 
@@ -85,55 +109,47 @@ async function generatePr() {
       ...github.context.repo,
     });
 
-    return {
-      pullRequestNumber: pullRequest.number,
-    };
+    return pullRequest.number;
   }
-
-  return "1";
 }
 
 (async () => {
-  const { transformIds, directories } = JSON.parse(core.getInput("data"));
-
-  // TODO: check if this is necessary
-  core.info("Setting GitHub credentials");
-
-  const githubToken = process.env.GITHUB_TOKEN;
-
   if (!githubToken) {
     core.setFailed("Please add the GITHUB_TOKEN to the hypermod workflow file");
     return;
   }
+
+  core.info("setting git user");
+  await setupUser();
 
   await fs.writeFile(
     `${process.env.HOME}/.netrc`,
     `machine github.com\nlogin github-actions[bot]\npassword ${githubToken}`
   );
 
+  const transformIds = core.getInput("transformIds");
+  const directories = core.getInput("directories");
+
   core.info(
-    "Fetching and running provided transforms",
-    transformIds,
-    directories
+    `Fetching and running provided transforms: ${transformIds} on directories: ${directories}`
   );
 
-  const { exitCode, stdout, stderr } = await getExecOutput(
-    "npx @hypermod/cli",
-    [`t=${transformIds.join(",")}`, directories]
-  );
+  // const { exitCode, stdout, stderr } = await getExecOutput(
+  //   "npx @hypermod/cli",
+  //   [`-t=${transformIds}`, directories]
+  // );
 
-  if (exitCode) {
-    core.setFailed(`Error: ${error.message}`);
-    return;
-  }
+  // if (exitCode) {
+  //   core.setFailed(`Error: ${error.message}`);
+  //   return;
+  // }
 
-  if (stderr) {
-    core.setFailed(`Error: ${stderr}`);
-    return;
-  }
+  // if (stderr) {
+  //   core.setFailed(`Error: ${stderr}`);
+  //   return;
+  // }
 
-  core.info("stdout", stdout);
-  // core.setOutput("result", stdout);
+  // core.info("stdout", stdout);
 
   // TODO: perform formatting with script of choice via npm run hypermod:format
 
@@ -145,12 +161,16 @@ async function generatePr() {
   //   return;
   // }
 
-  // // If so, generate pull requests
-  // if () {
-  //   const pullRequestNumber = await generatePr({  });
-  //   core.setOutput("pullRequestNumber", String(pullRequestNumber));
-  //   return
-  // }
+  core.info("Writing changes to pullrequest");
+
+  fs.writeFileSync("test.txt", "Hello world!" + Math.random());
+  // If so, generate pull requests
+  const pullRequestNumber = await generatePr({
+    finalPrTitle: "test pr title",
+    prBody: "test pr body",
+    commitMessage: "test commit message",
+  });
+  core.setOutput("pullRequestNumber", String(pullRequestNumber));
 })().catch((err) => {
   core.error(err);
   core.setFailed(err.message);

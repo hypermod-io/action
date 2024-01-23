@@ -4,8 +4,20 @@ runs:
   using: "node20"
   main: "dist/index.js"
 inputs:
-  data:
-    description: "Events dispatched from the Hypermod app as JSON"
+  eventType:
+    description: "Event type dispatched from the Hypermod app"
+    type: choice
+    required: true
+    options:
+      - transform
+      - check
+  transformIds:
+    description: "Transform Ids to run (comma separated)"
+    type: string
+    required: true
+  directories:
+    description: "Directories Ids to run (comma separated)"
+    type: string
     required: true
 outputs:
   pullRequestNumbers:

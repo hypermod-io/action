@@ -1,4 +1,4 @@
-const { exec, getExecOutput } = require("@actions/exec");
+import { exec, getExecOutput } from "@actions/exec";
 
 export const setupUser = async () => {
   await exec("git", ["config", "user.name", `"github-actions[bot]"`]);
@@ -9,20 +9,25 @@ export const setupUser = async () => {
   ]);
 };
 
-export const pullBranch = async (branch) =>
+export const pullBranch = async (branch: string) =>
   await exec("git", ["pull", "origin", branch]);
 
-export const push = async (branch, { force } = {}) => {
+export const push = async (
+  branch: string,
+  { force }: { force?: boolean } = {}
+) => {
   await exec(
     "git",
-    ["push", "origin", `HEAD:${branch}`, force && "--force"].filter(Boolean)
+    ["push", "origin", `HEAD:${branch}`, force && "--force"].filter<string>(
+      Boolean as any
+    )
   );
 };
 
 export const pushTags = async () =>
   await exec("git", ["push", "origin", "--tags"]);
 
-export const switchToMaybeExistingBranch = async (branch) => {
+export const switchToMaybeExistingBranch = async (branch: string) => {
   const { stderr } = await getExecOutput("git", ["checkout", branch], {
     ignoreReturnCode: true,
   });
@@ -34,10 +39,10 @@ export const switchToMaybeExistingBranch = async (branch) => {
   }
 };
 
-export const reset = async (pathSpec, mode = "hard") =>
+export const reset = async (pathSpec: string, mode = "hard") =>
   await exec("git", ["reset", `--${mode}`, pathSpec]);
 
-export const commitAll = async (message) => {
+export const commitAll = async (message: string) => {
   await exec("git", ["add", "."]);
   await exec("git", ["commit", "-m", message]);
 };
