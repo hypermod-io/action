@@ -1,4 +1,4 @@
-const fs = require("fs");
+const fs = require("fs-extra");
 const core = require("@actions/core");
 const { exec, getExecOutput } = require("@actions/exec");
 const { throttling } = require("@octokit/plugin-throttling");
