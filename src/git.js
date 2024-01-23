@@ -1,4 +1,4 @@
-import { exec, getExecOutput } from "@actions/exec";
+const { exec, getExecOutput } = require("@actions/exec");
 
 export const setupUser = async () => {
   await exec("git", ["config", "user.name", `"github-actions[bot]"`]);

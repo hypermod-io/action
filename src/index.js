@@ -3,13 +3,11 @@ const { exec, getExecOutput } = require("@actions/exec");
 const { throttling } = require("@octokit/plugin-throttling");
 const { GitHub, getOctokitOptions } = require("@actions/github/lib/utils");
 
-const gitUtils = require("./git");
-
-const setupOctokit = (githubToken: string) => {
+const setupOctokit = (githubToken) => {
   return new (GitHub.plugin(throttling))(
     getOctokitOptions(githubToken, {
       throttle: {
-        onRateLimit: (retryAfter, options: any, octokit, retryCount) => {
+        onRateLimit: (retryAfter, options, octokit, retryCount) => {
           core.warning(
             `Request quota exhausted for request ${options.method} ${options.url}`
           );
@@ -19,12 +17,7 @@ const setupOctokit = (githubToken: string) => {
             return true;
           }
         },
-        onSecondaryRateLimit: (
-          retryAfter,
-          options: any,
-          octokit,
-          retryCount
-        ) => {
+        onSecondaryRateLimit: (retryAfter, options, octokit, retryCount) => {
           core.warning(
             `SecondaryRateLimit detected for request ${options.method} ${options.url}`
           );
@@ -39,21 +32,20 @@ const setupOctokit = (githubToken: string) => {
   );
 };
 
-
-function generatePr() {
+async function generatePr() {
   const repo = `${github.context.repo.owner}/${github.context.repo.repo}`;
   const branch = github.context.ref.replace("refs/heads/", "");
   const transformBranch = `hypermod-transform/hello`;
 
-  await gitUtils.switchToMaybeExistingBranch(transformBranch);
-  await gitUtils.reset(github.context.sha);
+  await switchToMaybeExistingBranch(transformBranch);
+  await reset(github.context.sha);
 
   // project with `commit: true` setting could have already committed files
-  if (!(await gitUtils.checkIfClean())) {
+  if (!(await checkIfClean())) {
     const finalCommitMessage = `${commitMessage}${
       !!preState ? ` (${preState.tag})` : ""
     }`;
-    await gitUtils.commitAll(finalCommitMessage);
+    await commitAll(finalCommitMessage);
   }
 
   const searchQuery = `repo:${repo}+state:open+head:${transformBranch}+base:${branch}+is:pull-request`;
@@ -61,14 +53,12 @@ function generatePr() {
     q: searchQuery,
   });
 
-  await gitUtils.push(transformBranch, { force: true });
+  await push(transformBranch, { force: true });
 
   const searchResult = await searchResultPromise;
   core.info(JSON.stringify(searchResult.data, null, 2));
 
-
   const octokit = setupOctokit(githubToken);
-
 
   if (searchResult.data.items.length === 0) {
     core.info("creating pull request");
@@ -99,7 +89,7 @@ function generatePr() {
     };
   }
 
-  return '1';
+  return "1";
 }
 
 (async () => {
