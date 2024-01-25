@@ -47,7 +47,12 @@ export const commitAll = async (message: string) => {
   await exec("git", ["commit", "-m", message]);
 };
 
-export const checkIfClean = async () => {
+export const status = async () => {
   const { stdout } = await getExecOutput("git", ["status", "--porcelain"]);
+  return stdout;
+};
+
+export const checkIfClean = async () => {
+  const stdout = await status();
   return !stdout.length;
 };

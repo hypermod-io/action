@@ -1,11 +1,10 @@
+import path from "path";
 import fs from "fs-extra";
 import * as core from "@actions/core";
 import * as github from "@actions/github";
 import { exec, getExecOutput } from "@actions/exec";
 import { throttling } from "@octokit/plugin-throttling";
 import { GitHub, getOctokitOptions } from "@actions/github/lib/utils";
-
-const githubToken = process.env.GITHUB_TOKEN!;
 
 import {
   switchToMaybeExistingBranch,
@@ -14,7 +13,15 @@ import {
   commitAll,
   setupUser,
   push,
+  status,
 } from "./git";
+
+interface Transform {
+  id: string;
+  sources: { name: string; code: string }[];
+}
+
+const githubToken = process.env.GITHUB_TOKEN!;
 
 const setupOctokit = (githubToken: string) => {
   return new (GitHub.plugin(throttling))(
@@ -70,11 +77,7 @@ async function generatePr({
 
   await switchToMaybeExistingBranch(transformBranch);
   await reset(github.context.sha);
-
-  // project with `commit: true` setting could have already committed files
-  if (!(await checkIfClean())) {
-    await commitAll(commitMessage);
-  }
+  await commitAll(commitMessage);
 
   const octokit = setupOctokit(githubToken);
   const searchQuery = `repo:${repo}+state:open+head:${transformBranch}+base:${branch}+is:pull-request`;
@@ -134,34 +137,56 @@ async function generatePr({
     `Fetching and running provided transforms: ${transformIds} on directories: ${directories}`
   );
 
-  // const { exitCode, stdout, stderr } = await getExecOutput(
-  //   "npx @hypermod/cli",
-  //   [`-t=${transformIds}`, directories]
-  // );
+  const repoName = `${github.context.repo.owner}/${github.context.repo.repo}`;
+  const transformsRes = await fetch(
+    `https://hypermod.io/api/sources?transformIds=${transformIds}&repositoryId=${repoName}&deploymentKey=*`
+  );
 
-  // if (exitCode) {
-  //   core.setFailed(`Error: ${error.message}`);
-  //   return;
-  // }
+  const hypermodDir = path.join(process.cwd(), ".hypermod");
+  const transforms: Transform[] = await transformsRes.json();
+  const transformPaths: string[] = [];
 
-  // if (stderr) {
-  //   core.setFailed(`Error: ${stderr}`);
-  //   return;
-  // }
+  transforms.map(({ id, sources }) => {
+    sources.map((source) => {
+      const filePath = path.join(hypermodDir, id, source.name);
+      core.info(`writing ${filePath}`);
+      transformPaths.push(filePath);
+      fs.writeFileSync(filePath, source.code);
+    });
+  });
 
-  // core.info("stdout", stdout);
+  const { exitCode, stdout, stderr } = await getExecOutput(
+    "npx @hypermod/cli",
+    [`-t=${transformPaths.join(",")}`, directories]
+  );
+
+  if (exitCode) {
+    core.setFailed(`Error: transform failed with:  ${exitCode}`);
+    core.error(stderr);
+    return;
+  }
+
+  if (stderr) {
+    core.setFailed(`Error: ${stderr}`);
+    return;
+  }
+
+  core.info(stdout);
+
+  // Clean up temporary files
+  await fs.remove(hypermodDir);
 
   // TODO: perform formatting with script of choice via npm run hypermod:format
 
   // Check if there are any file diffs
+  if (!(await checkIfClean())) {
+    core.info("No changes detected");
+    return;
+  }
 
-  // If no diffs, exit
-  // if (false) {
-  //   core.info("No changes detected");
-  //   return;
-  // }
-
-  core.info("Writing changes to pullrequest");
+  core.info("Writing following altered files to pullrequest");
+  const diffs = await status();
+  core.info(diffs);
 
   fs.writeFileSync("test.txt", "Hello world!" + Math.random());
   // If so, generate pull requests
