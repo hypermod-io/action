@@ -16,9 +16,17 @@ import {
   status,
 } from "./git";
 
-interface Transform {
+interface Source {
   id: string;
-  sources: { name: string; code: string }[];
+  name: string;
+  code: string;
+}
+
+interface Deployment {
+  id: string;
+  title: string;
+  description: string;
+  transforms: Record<string, Source[]>;
 }
 
 const githubToken = process.env.GITHUB_TOKEN!;
@@ -135,8 +143,8 @@ async function generatePr({
 
   core.info(`Fetching and running provided deployment: ${deploymentId}`);
 
-  const deployment = await fetch(
-    `https://hypermod.io/api/action/${deploymentId}/deployment`
+  const deployment: Deployment = await fetch(
+    `https://hypermod.vercel.app/api/action/${deploymentId}/deployment`
   ).then((res) => res.json());
 
   core.info(
@@ -147,7 +155,7 @@ async function generatePr({
 
   const transformPaths: string[] = [];
 
-  deployment.transforms.entries(([id, sources]) => {
+  Object.entries(deployment.transforms).map(([id, sources]) => {
     sources.map((source) => {
       const filePath = path.join(HYPERMOD_DIR, id, source.name);
       core.info(`writing ${filePath}`);
@@ -196,13 +204,14 @@ async function generatePr({
     commitMessage: `@hypermod ${deployment.title}`,
   });
 
-  await fetch(`https://hypermod.io/api/action/${deploymentId}/deployment`, {
-    method: "POST",
-    body: JSON.stringify({ pullRequestNumber }),
-    headers: {
-      "Content-Type": "application/json",
-    },
-  });
+  await fetch(
+    `https://hypermod.vercel.app/api/action/${deploymentId}/deployment`,
+    {
+      method: "POST",
+      body: JSON.stringify({ pullRequestNumber }),
+      headers: { "Content-Type": "application/json" },
+    }
+  );
 
   core.setOutput("pullRequestNumber", String(pullRequestNumber));
 })().catch((err) => {
