@@ -22,6 +22,7 @@ interface Transform {
 }
 
 const githubToken = process.env.GITHUB_TOKEN!;
+const HYPERMOD_DIR = path.join(process.cwd(), ".hypermod");
 
 const setupOctokit = (githubToken: string) => {
   return new (GitHub.plugin(throttling))(
@@ -130,25 +131,25 @@ async function generatePr({
     `machine github.com\nlogin github-actions[bot]\npassword ${githubToken}`
   );
 
-  const transformIds = core.getInput("transformIds");
-  const directories = core.getInput("directories");
+  const deploymentId = core.getInput("deploymentId");
+
+  core.info(`Fetching and running provided deployment: ${deploymentId}`);
+
+  const deployment = await fetch(
+    `https://hypermod.io/api/action/${deploymentId}/deployment`
+  ).then((res) => res.json());
 
   core.info(
-    `Fetching and running provided transforms: ${transformIds} on directories: ${directories}`
+    `Fetching transform source files: ${Object.keys(deployment.transforms).join(
+      ","
+    )}`
   );
 
-  const repoName = `${github.context.repo.owner}/${github.context.repo.repo}`;
-  const transformsRes = await fetch(
-    `https://hypermod.io/api/sources?transformIds=${transformIds}&repositoryId=${repoName}&deploymentKey=*`
-  );
-
-  const hypermodDir = path.join(process.cwd(), ".hypermod");
-  const transforms: Transform[] = await transformsRes.json();
   const transformPaths: string[] = [];
 
-  transforms.map(({ id, sources }) => {
+  deployment.transforms.entries(([id, sources]) => {
     sources.map((source) => {
-      const filePath = path.join(hypermodDir, id, source.name);
+      const filePath = path.join(HYPERMOD_DIR, id, source.name);
       core.info(`writing ${filePath}`);
       transformPaths.push(filePath);
       fs.writeFileSync(filePath, source.code);
@@ -157,7 +158,7 @@ async function generatePr({
 
   const { exitCode, stdout, stderr } = await getExecOutput(
     "npx @hypermod/cli",
-    [`-t=${transformPaths.join(",")}`, directories]
+    [`-t=${transformPaths.join(",")}`, "./src"]
   );
 
   if (exitCode) {
@@ -174,7 +175,7 @@ async function generatePr({
   core.info(stdout);
 
   // Clean up temporary files
-  await fs.remove(hypermodDir);
+  await fs.remove(HYPERMOD_DIR);
 
   // TODO: perform formatting with script of choice via npm run hypermod:format
 
@@ -188,13 +189,21 @@ async function generatePr({
   const diffs = await status();
   core.info(diffs);
 
-  fs.writeFileSync("test.txt", "Hello world!" + Math.random());
-  // If so, generate pull requests
+  // Generate pull requests
   const pullRequestNumber = await generatePr({
-    finalPrTitle: "test pr title",
-    prBody: "test pr body",
-    commitMessage: "test commit message",
+    finalPrTitle: deployment.title,
+    prBody: deployment.description,
+    commitMessage: `@hypermod ${deployment.title}`,
   });
+
+  await fetch(`https://hypermod.io/api/action/${deploymentId}/deployment`, {
+    method: "POST",
+    body: JSON.stringify({ pullRequestNumber }),
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+
   core.setOutput("pullRequestNumber", String(pullRequestNumber));
 })().catch((err) => {
   core.error(err);
