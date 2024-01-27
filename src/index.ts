@@ -122,7 +122,7 @@ async function generatePr({
     return;
   }
 
-  core.info("setting git user");
+  core.info("Setting git user");
   await setupUser();
 
   await fs.writeFile(
