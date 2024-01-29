@@ -160,7 +160,7 @@ async function generatePr({
       const filePath = path.join(HYPERMOD_DIR, id, source.name);
       core.info(`writing ${filePath}`);
       transformPaths.push(filePath);
-      fs.writeFileSync(filePath, source.code);
+      fs.outputFileSync(filePath, source.code);
     });
   });
 
@@ -193,7 +193,7 @@ async function generatePr({
     return;
   }
 
-  core.info("Writing following altered files to pullrequest");
+  core.info("Writing altered files to pullrequest");
   const diffs = await status();
   core.info(diffs);
 
