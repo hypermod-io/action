@@ -2,19 +2,17 @@ import path from "path";
 import fs from "fs-extra";
 import * as core from "@actions/core";
 import * as github from "@actions/github";
-import { exec, getExecOutput } from "@actions/exec";
-import { throttling } from "@octokit/plugin-throttling";
-import { GitHub, getOctokitOptions } from "@actions/github/lib/utils";
+import { getExecOutput } from "@actions/exec";
 
 import {
   switchToMaybeExistingBranch,
   reset,
-  checkIfClean,
   commitAll,
   setupUser,
   push,
   status,
 } from "./git";
+import { setupOctokit } from "./octokit";
 
 interface Source {
   id: string;
@@ -30,100 +28,7 @@ interface Deployment {
 }
 
 const githubToken = process.env.GITHUB_TOKEN!;
-const HYPERMOD_DIR = path.join(process.cwd(), ".hypermod");
-
-const setupOctokit = (githubToken: string) => {
-  return new (GitHub.plugin(throttling))(
-    getOctokitOptions(githubToken, {
-      throttle: {
-        onRateLimit: (
-          retryAfter: number,
-          options: { method: string; url: string },
-          _octokit: any,
-          retryCount: number
-        ) => {
-          core.warning(
-            `Request quota exhausted for request ${options.method} ${options.url}`
-          );
-
-          if (retryCount <= 2) {
-            core.info(`Retrying after ${retryAfter} seconds!`);
-            return true;
-          }
-        },
-        onSecondaryRateLimit: (
-          retryAfter: number,
-          options: { method: string; url: string },
-          _octokit: any,
-          retryCount: number
-        ) => {
-          core.warning(
-            `SecondaryRateLimit detected for request ${options.method} ${options.url}`
-          );
-
-          if (retryCount <= 2) {
-            core.info(`Retrying after ${retryAfter} seconds!`);
-            return true;
-          }
-        },
-      },
-    })
-  );
-};
-
-async function generatePr({
-  commitMessage,
-  finalPrTitle,
-  prBody,
-}: {
-  commitMessage: string;
-  finalPrTitle: string;
-  prBody: string;
-}) {
-  const repo = `${github.context.repo.owner}/${github.context.repo.repo}`;
-  const branch = github.context.ref.replace("refs/heads/", "");
-  const transformBranch = `hypermod-transform/hello`;
-
-  await switchToMaybeExistingBranch(transformBranch);
-  await reset(github.context.sha);
-  await commitAll(commitMessage);
-
-  const octokit = setupOctokit(githubToken);
-  const searchQuery = `repo:${repo}+state:open+head:${transformBranch}+base:${branch}+is:pull-request`;
-  const searchResultPromise = octokit.rest.search.issuesAndPullRequests({
-    q: searchQuery,
-  });
-
-  await push(transformBranch, { force: true });
-
-  const searchResult = await searchResultPromise;
-  core.info(JSON.stringify(searchResult.data, null, 2));
-
-  if (searchResult.data.items.length === 0) {
-    core.info("creating pull request");
-    const { data: newPullRequest } = await octokit.rest.pulls.create({
-      base: branch,
-      head: transformBranch,
-      title: finalPrTitle,
-      body: prBody,
-      ...github.context.repo,
-    });
-
-    return newPullRequest.number;
-  } else {
-    const [pullRequest] = searchResult.data.items;
-
-    core.info(`updating found pull request #${pullRequest.number}`);
-    await octokit.rest.pulls.update({
-      pull_number: pullRequest.number,
-      title: finalPrTitle,
-      body: prBody,
-      ...github.context.repo,
-    });
-
-    return pullRequest.number;
-  }
-}
+const HYPERMOD_DIR = ".hypermod";
 
 (async () => {
   if (!githubToken) {
@@ -131,7 +36,7 @@ async function generatePr({
     return;
   }
 
-  core.info("Setting git user");
+  core.info("@hypermod: Setting git user\n");
   await setupUser();
 
   await fs.writeFile(
@@ -139,73 +44,113 @@ async function generatePr({
     `machine github.com\nlogin github-actions[bot]\npassword ${githubToken}`
   );
 
+  core.info("@hypermod: Preparing fresh branch\n");
+
   const deploymentId = core.getInput("deploymentId");
+  const repo = `${github.context.repo.owner}/${github.context.repo.repo}`;
+  const branchName = `hypermod-transform/${deploymentId}`;
+  const branch = github.context.ref.replace("refs/heads/", "");
+
+  await switchToMaybeExistingBranch(branchName);
+  await reset(github.context.sha);
 
   core.info(`Fetching and running provided deployment: ${deploymentId}`);
 
   const deployment: Deployment = await fetch(
-    `https://hypermod.vercel.app/api/action/${deploymentId}/deployment`
+    `https://hypermod.vercel.app/api/action/${deploymentId}/deployment${repo}`
   ).then((res) => res.json());
 
   core.info(
-    `Fetching transform source files: ${Object.keys(deployment.transforms).join(
-      ","
-    )}`
+    `@hypermod: Fetching transform source files: ${Object.keys(
+      deployment.transforms
+    ).join(",")}`
   );
 
   const transformPaths: string[] = [];
 
-  Object.entries(deployment.transforms).map(([id, sources]) => {
-    sources.map((source) => {
-      const filePath = path.join(HYPERMOD_DIR, id, source.name);
-      core.info(`writing ${filePath}`);
-      transformPaths.push(filePath);
+  Object.entries(deployment.transforms).forEach(([id, sources]) => {
+    sources.forEach((source) => {
+      const filePath = path.join(process.cwd(), HYPERMOD_DIR, id, source.name);
+      if (filePath.includes("transform.js")) {
+        transformPaths.push(filePath);
+      }
+
+      core.info(`Writing ${filePath}`);
       fs.outputFileSync(filePath, source.code);
     });
   });
 
-  const { exitCode, stdout, stderr } = await getExecOutput(
-    "npx @hypermod/cli",
-    [`-t=${transformPaths.join(",")}`, "./src"]
-  );
+  try {
+    const { exitCode, stderr } = await getExecOutput(
+      `npx --yes @hypermod/cli -t ${transformPaths.join(
+        ","
+      )} --parser tsx --extensions tsx,ts,js src/`
+    );
 
-  if (exitCode) {
-    core.setFailed(`Error: transform failed with:  ${exitCode}`);
-    core.error(stderr);
-    return;
-  }
-
-  if (stderr) {
-    core.setFailed(`Error: ${stderr}`);
-    return;
-  }
-
-  core.info(stdout);
+    if (exitCode) {
+      core.setFailed(`Error: transform failed with:  ${exitCode}`);
+      core.error(stderr);
+    }
+  } catch (err) {}
 
   // Clean up temporary files
-  await fs.remove(HYPERMOD_DIR);
+  await fs.remove(path.join(HYPERMOD_DIR));
 
   // TODO: perform formatting with script of choice via npm run hypermod:format
 
   // Check if there are any file diffs
-  if (!(await checkIfClean())) {
-    core.info("No changes detected");
+  const diffs = await status();
+
+  if (!Boolean(diffs.length)) {
+    core.info("@hypermod: No changes detected\n");
     return;
   }
 
-  core.info("Writing altered files to pullrequest");
-  const diffs = await status();
+  core.info("@hypermod: Writing altered files to pull request\n");
   core.info(diffs);
 
-  // Generate pull requests
-  const pullRequestNumber = await generatePr({
-    finalPrTitle: deployment.title,
-    prBody: deployment.description,
-    commitMessage: `@hypermod ${deployment.title}`,
+  await commitAll(`@hypermod ${deployment.title}`);
+
+  const octokit = setupOctokit(githubToken);
+  const searchQuery = `repo:${repo}+state:open+head:${branchName}+base:${branch}+is:pull-request`;
+  const searchResultPromise = octokit.rest.search.issuesAndPullRequests({
+    q: searchQuery,
   });
 
+  await push(branchName, { force: true });
+
+  const searchResult = await searchResultPromise;
+  core.info(JSON.stringify(searchResult.data, null, 2));
+
+  let pullRequestNumber: number;
+
+  if (searchResult.data.items.length === 0) {
+    core.info("@hypermod: Creating pull request\n");
+    const { data: newPullRequest } = await octokit.rest.pulls.create({
+      base: branch,
+      head: branchName,
+      title: deployment.title,
+      body: deployment.description,
+      ...github.context.repo,
+    });
+
+    pullRequestNumber = newPullRequest.number;
+  } else {
+    const [pullRequest] = searchResult.data.items;
+
+    core.info(`updating found pull request #${pullRequest.number}`);
+    await octokit.rest.pulls.update({
+      pull_number: pullRequest.number,
+      title: deployment.title,
+      body: deployment.description,
+      ...github.context.repo,
+    });
+
+    pullRequestNumber = pullRequest.number;
+  }
+
   await fetch(
-    `https://hypermod.vercel.app/api/action/${deploymentId}/deployment`,
+    `https://hypermod.vercel.app/api/action/${deploymentId}/deployment/${repo}`,
     {
       method: "POST",
       body: JSON.stringify({ pullRequestNumber }),
