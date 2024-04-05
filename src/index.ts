@@ -47,6 +47,7 @@ const HYPERMOD_DIR = ".hypermod";
   core.info("@hypermod: Preparing fresh branch\n");
 
   const deploymentId = core.getInput("deploymentId");
+  const deploymentKey = core.getInput("deploymentKey");
   const repo = `${github.context.repo.owner}/${github.context.repo.repo}`;
   const branchName = `hypermod-transform/${deploymentId}`;
   const branch = github.context.ref.replace("refs/heads/", "");
@@ -57,7 +58,7 @@ const HYPERMOD_DIR = ".hypermod";
   core.info(`Fetching and running provided deployment: ${deploymentId}`);
 
   const deployment: Deployment = await fetch(
-    `https://www.hypermod.io/api/action/${deploymentId}/deployment/${repo}`
+    `https://www.hypermod.io/api/action/${deploymentId}/${deploymentKey}/deployment/${repo}`
   ).then((res) => res.json());
 
   core.info(
@@ -150,7 +151,7 @@ const HYPERMOD_DIR = ".hypermod";
   }
 
   await fetch(
-    `https://www.hypermod.io/api/action/${deploymentId}/deployment/${repo}`,
+    `https://www.hypermod.io/api/action/${deploymentId}/${deploymentKey}/deployment/${repo}`,
     {
       method: "POST",
       body: JSON.stringify({ pullRequestNumber }),
