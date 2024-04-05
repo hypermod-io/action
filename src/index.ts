@@ -57,7 +57,7 @@ const HYPERMOD_DIR = ".hypermod";
   core.info(`Fetching and running provided deployment: ${deploymentId}`);
 
   const deployment: Deployment = await fetch(
-    `https://hypermod.vercel.app/api/action/${deploymentId}/deployment${repo}`
+    `https://www.hypermod.io/api/action/${deploymentId}/deployment${repo}`
   ).then((res) => res.json());
 
   core.info(
@@ -150,7 +150,7 @@ const HYPERMOD_DIR = ".hypermod";
   }
 
   await fetch(
-    `https://hypermod.vercel.app/api/action/${deploymentId}/deployment/${repo}`,
+    `https://www.hypermod.io/api/action/${deploymentId}/deployment/${repo}`,
     {
       method: "POST",
       body: JSON.stringify({ pullRequestNumber }),
