@@ -89,7 +89,7 @@ const HYPERMOD_DIR = ".hypermod";
     const { exitCode, stderr } = await getExecOutput(
       `npx --yes @hypermod/cli -t ${transformPaths.join(
         ","
-      )} --parser tsx --extensions tsx,ts,js src/`
+      )} --parser tsx --extensions tsx,ts,js ./`
     );
 
     if (exitCode) {
