@@ -20,11 +20,17 @@ interface Source {
   code: string;
 }
 
+interface Transform {
+  id: string;
+  parser?: string;
+  sources: Source[];
+}
+
 interface Deployment {
   id: string;
   title: string;
   description: string;
-  transforms: Record<string, Source[]>;
+  transforms: Transform[];
 }
 
 const githubToken = process.env.GITHUB_TOKEN!;
@@ -67,16 +73,23 @@ const HYPERMOD_DIR = ".hypermod";
     ).join(",")}`
   );
 
-  const transformPaths: string[] = [];
+  const commands: string[] = [];
 
-  Object.entries(deployment.transforms).forEach(([id, sources]) => {
-    sources.forEach((source) => {
-      const filePath = path.join(process.cwd(), HYPERMOD_DIR, id, source.name);
+  deployment.transforms.forEach((transform) => {
+    transform.sources.forEach((source) => {
+      const filePath = path.join(
+        process.cwd(),
+        HYPERMOD_DIR,
+        transform.id,
+        source.name
+      );
       if (
         filePath.includes("transform.ts") ||
         filePath.includes("transform.js")
       ) {
-        transformPaths.push(filePath);
+        commands.push(
+          `npx --yes @hypermod/cli -t ${filePath} --parser ${transform.parser} --extensions tsx,ts,js ./`
+        );
       }
 
       core.info(`Writing ${filePath}`);
@@ -84,19 +97,16 @@ const HYPERMOD_DIR = ".hypermod";
     });
   });
 
-  try {
-    // TODO: remove src path hardcoding
-    const { exitCode, stderr } = await getExecOutput(
-      `npx --yes @hypermod/cli -t ${transformPaths.join(
-        ","
-      )} --parser tsx --extensions tsx,ts,js ./`
-    );
+  for (const command of commands) {
+    try {
+      const { exitCode, stderr } = await getExecOutput(command);
 
-    if (exitCode) {
-      core.setFailed(`Error: transform failed with:  ${exitCode}`);
-      core.error(stderr);
-    }
-  } catch (err) {}
+      if (exitCode) {
+        core.setFailed(`Error: transform failed with:  ${exitCode}`);
+        core.error(stderr);
+      }
+    } catch (err) {}
+  }
 
   // Clean up temporary files
   await fs.remove(path.join(HYPERMOD_DIR));
