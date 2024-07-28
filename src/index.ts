@@ -24,13 +24,22 @@ interface Transform {
   id: string;
   parser?: string;
   sources: Source[];
+  deploymentId: string;
+  transformId: string;
+  transform: Transform[];
+}
+
+interface TransformOnDeployment {
+  deploymentId: string;
+  transformId: string;
+  transform: Transform;
 }
 
 interface Deployment {
   id: string;
   title: string;
   description: string;
-  transforms: Transform[];
+  transforms: TransformOnDeployment[];
 }
 
 const githubToken = process.env.GITHUB_TOKEN!;
@@ -75,7 +84,7 @@ const HYPERMOD_DIR = ".hypermod";
 
   const commands: string[] = [];
 
-  deployment.transforms.forEach((transform) => {
+  deployment.transforms.forEach(({ transform }) => {
     transform.sources.forEach((source) => {
       const filePath = path.join(
         process.cwd(),
@@ -88,7 +97,9 @@ const HYPERMOD_DIR = ".hypermod";
         filePath.includes("transform.js")
       ) {
         commands.push(
-          `npx --yes @hypermod/cli -t ${filePath} --parser ${transform.parser} --extensions tsx,ts,js ./`
+          `npx --yes @hypermod/cli -t ${filePath} --parser ${
+            transform.parser || "tsx"
+          } --extensions tsx,ts,js ./`
         );
       }
 
