@@ -99,7 +99,7 @@ const HYPERMOD_DIR = ".hypermod";
         commands.push(
           `npx --yes @hypermod/cli -t ${filePath} --parser ${
             transform.parser || "tsx"
-          } --extensions tsx,ts,js ./`
+          } ./`
         );
       }
 
