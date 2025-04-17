@@ -2,7 +2,7 @@ import path from "path";
 import fs from "fs-extra";
 import * as core from "@actions/core";
 import * as github from "@actions/github";
-import { getExecOutput } from "@actions/exec";
+import { exec, getExecOutput } from "@actions/exec";
 
 import {
   switchToMaybeExistingBranch,
@@ -122,8 +122,6 @@ const HYPERMOD_DIR = ".hypermod";
   // Clean up temporary files
   await fs.remove(path.join(HYPERMOD_DIR));
 
-  // TODO: perform formatting with script of choice via npm run hypermod:format
-
   // Check if there are any file diffs
   const diffs = await status();
 
@@ -134,6 +132,11 @@ const HYPERMOD_DIR = ".hypermod";
 
   core.info("@hypermod: Writing altered files to pull request\n");
   core.info(diffs);
+
+  await exec("bash", [
+    "-c",
+    `git status --porcelain | awk '{print substr($0, 4)}' | xargs -r npx prettier --write`,
+  ]);
 
   await commitAll(`@hypermod ${deployment.title}`);
 
