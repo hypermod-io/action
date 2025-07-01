@@ -16,14 +16,7 @@ vi.mock("@actions/exec", () => ({
 }));
 
 // Mock dependencies
-vi.mock("./git", () => ({
-  setupUser: vi.fn(),
-  switchToMaybeExistingBranch: vi.fn(),
-  reset: vi.fn(),
-  commitAll: vi.fn(),
-  status: vi.fn().mockResolvedValue(["test-file.js"]),
-  push: vi.fn(),
-}));
+vi.mock("./git");
 
 vi.mock("@actions/core", () => ({
   getInput: vi.fn().mockImplementation((name) => {
@@ -33,6 +26,7 @@ vi.mock("@actions/core", () => ({
   }),
   info: vi.fn(),
   error: vi.fn().mockImplementation((msg) => console.error(msg)),
+  warning: vi.fn(),
   setFailed: vi.fn().mockImplementation((msg) => console.error(msg)),
   setOutput: vi.fn(),
 }));
@@ -45,13 +39,6 @@ vi.mock("@actions/github", () => ({
   },
 }));
 
-vi.mock("@actions/exec", () => ({
-  exec: vi.fn().mockResolvedValue(0),
-  getExecOutput: vi
-    .fn()
-    .mockResolvedValue({ exitCode: 0, stderr: "", stdout: "" }),
-}));
-
 vi.mock("fs-extra", async (importOriginal) => {
   const actual = await importOriginal<Object>();
   return {
@@ -62,29 +49,14 @@ vi.mock("fs-extra", async (importOriginal) => {
   };
 });
 
-vi.mock("./octokit", () => ({
-  setupOctokit: vi.fn().mockReturnValue({
-    rest: {
-      search: {
-        issuesAndPullRequests: vi
-          .fn()
-          .mockResolvedValue({ data: { items: [] } }),
-      },
-      pulls: {
-        create: vi.fn().mockResolvedValue({ data: { number: 123 } }),
-        update: vi.fn().mockResolvedValue({}),
-      },
-    },
-  }),
-}));
+vi.mock("./octokit");
 
 import * as fs from "fs-extra";
 import * as core from "@actions/core";
 import * as exec from "@actions/exec";
-
+import * as git from "./git";
 import * as octokit from "./octokit";
 import { Deployment } from "./types";
-import * as git from "./git";
 import main from "./main";
 
 const mockDeployment: Deployment = {
@@ -122,9 +94,33 @@ let fetchDeploymentDataMock: MockInstance;
 
 describe("GitHub Action Workflow", () => {
   beforeEach(() => {
+    vi.resetModules();
     vi.clearAllMocks();
-
     vi.stubEnv("GITHUB_TOKEN", "test-token");
+
+    vi.mocked(git.setupUser).mockResolvedValue();
+    vi.mocked(git.switchToMaybeExistingBranch).mockResolvedValue();
+    vi.mocked(git.reset).mockResolvedValue(0);
+    vi.mocked(git.commitAll).mockResolvedValue();
+    vi.mocked(git.status).mockResolvedValue("test-file.js");
+    vi.mocked(git.push).mockResolvedValue();
+
+    vi.mocked(octokit.setupOctokit).mockReturnValue({
+      rest: {
+        search: {
+          // @ts-expect-error
+          issuesAndPullRequests: vi
+            .fn()
+            .mockResolvedValue({ data: { items: [] } }),
+        },
+        pulls: {
+          // @ts-expect-error
+          create: vi.fn().mockResolvedValue({ data: { number: 123 } }),
+          // @ts-expect-error
+          update: vi.fn().mockResolvedValue({}),
+        },
+      },
+    });
 
     fetchDeploymentDataMock = vi
       .fn()
@@ -140,10 +136,6 @@ describe("GitHub Action Workflow", () => {
       .mockImplementationOnce(() => Promise.resolve({ ok: true, status: 200 }));
 
     vi.stubGlobal("fetch", fetchDeploymentDataMock);
-  });
-
-  afterEach(() => {
-    // vi.restoreAllMocks();
   });
 
   it("should fail if GITHUB_TOKEN is not provided", async () => {
@@ -188,6 +180,66 @@ describe("GitHub Action Workflow", () => {
       expect.stringContaining(".hypermod/transform1/transform.js"),
       "console.log('test');"
     );
+  });
+
+  it("should formulate and execute the correct TRANSFORM cli commands", async () => {
+    vi.mocked(exec.getExecOutput)
+      // install ni
+      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "" })
+      // install deps
+      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "" })
+      // run transform
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stderr: "",
+        stdout: "Transform executed",
+      });
+
+    await main();
+
+    expect(exec.getExecOutput).toHaveBeenCalledTimes(4);
+    expect(exec.getExecOutput).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /^hypermod -t .*\/.hypermod\/transform1\/transform.js --parser tsx (\.\/|\.)$/i
+      )
+    );
+  });
+
+  it("should formulate and execute the correct ACTION cli commands", async () => {
+    const actionDeployment: Deployment = {
+      ...mockDeployment,
+      transforms: [
+        mockDeployment.transforms[0],
+        {
+          deploymentId: "test-deployment-id",
+          type: "ACTION",
+          actionId: "action1",
+          action: { name: "install-dependency" },
+          arguments: [
+            { key: "dependency-name", value: "example-package" },
+            { key: "version", value: "1.0.0" },
+          ],
+        },
+      ],
+    };
+
+    vi.stubGlobal("fetch", () =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(actionDeployment),
+      })
+    );
+
+    await main();
+
+    expect(exec.getExecOutput).toHaveBeenCalledTimes(5);
+    expect(exec.getExecOutput).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /^hypermod -t .*\/.hypermod\/transform1\/transform.js --parser tsx (\.\/|\.)$/i
+      )
+    );
+    expect(exec.getExecOutput).toHaveBeenCalledWith("ni example-package@1.0.0");
   });
 
   it("should exit early if no changes are detected", async () => {
@@ -274,6 +326,8 @@ describe("GitHub Action Workflow", () => {
 
   it("should fail if a transform command fails", async () => {
     vi.mocked(exec.getExecOutput)
+      // install hypermod cli
+      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "" })
       // install ni
       .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "" })
       // install deps

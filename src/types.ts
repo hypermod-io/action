@@ -43,8 +43,8 @@ export interface Argument {
 
 export interface TransformOnDeployment {
   deploymentId: string;
-  transformId: string;
-  transform: Transform;
+  transformId?: string;
+  transform?: Transform;
   actionId?: string;
   action?: Action;
   type: "TRANSFORM" | "ACTION";

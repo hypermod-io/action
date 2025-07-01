@@ -14,16 +14,23 @@ import {
 } from "./git";
 import { setupOctokit } from "./octokit";
 import { resolveAction } from "./actions";
-import { Deployment } from "./types";
+import { Action, Deployment, Transform, TransformOnDeployment } from "./types";
 
 const HYPERMOD_DIR = ".hypermod";
 
-export default async function main() {
-  // const res = await getExecOutput("foo");
-  // console.log(res);
-  // const res2 = await getExecOutput("foo");
-  // console.log(res2);
+function isTransformEntry(
+  entry: TransformOnDeployment
+): entry is TransformOnDeployment & { transform: Transform } {
+  return entry.type === "TRANSFORM" && entry.transform !== undefined;
+}
 
+function isActionEntry(
+  entry: TransformOnDeployment
+): entry is TransformOnDeployment & { action: Action } {
+  return entry.type === "ACTION" && entry.action !== undefined;
+}
+
+export default async function main() {
   const githubToken = process.env.GITHUB_TOKEN!;
 
   if (!githubToken) {
@@ -36,6 +43,13 @@ export default async function main() {
   await fs.writeFile(
     `${process.env.HOME}/.netrc`,
     `machine github.com\nlogin github-actions[bot]\npassword ${githubToken}`
+  );
+
+  // install @hypermod/cli globally
+  core.info("@hypermod: Installing @hypermod/cli globally\n");
+  const { exitCode: cliExitCode, stderr: cliStdErr } = await getExecOutput(
+    "npm",
+    ["install", "-g", "@hypermod/cli"]
   );
 
   // install ni globally
@@ -97,7 +111,7 @@ export default async function main() {
   const commands: string[] = [];
 
   // Write transform source files to the .hypermod directory
-  deployment.transforms.forEach(({ transform }) => {
+  deployment.transforms.filter(isTransformEntry).forEach(({ transform }) => {
     transform.sources.forEach((source) => {
       const filePath = path.join(
         process.cwd(),
@@ -113,23 +127,23 @@ export default async function main() {
   });
 
   // Prepare cli commands to run the transforms
-  deployment.transforms.forEach(
-    ({ type, action, transform, arguments: args }) => {
-      // Handle actions
-      if (type === "ACTION") {
-        const command = resolveAction(action!, args);
-        commands.push(command);
-        return;
-      }
+  deployment.transforms.forEach((entry) => {
+    // Handle actions
+    if (isActionEntry(entry)) {
+      const command = resolveAction(entry.action, entry.arguments);
+      commands.push(command);
+      return;
+    }
 
-      // Handle transforms
-      const transformEntry = transform.sources.find(
+    // Handle transforms
+    if (isTransformEntry(entry)) {
+      const transformEntry = entry.transform.sources.find(
         ({ name }) => name === "transform.ts" || name === "transform.js"
       );
 
       if (!transformEntry) {
         core.warning(
-          `No transform file found for transform ${transform.id}. Skipping...`
+          `No transform file found for transform ${entry.transform.id}. Skipping...`
         );
         return;
       }
@@ -137,17 +151,19 @@ export default async function main() {
       const entryFilePath = path.join(
         process.cwd(),
         HYPERMOD_DIR,
-        transform.id,
+        entry.transform.id,
         transformEntry.name
       );
 
       commands.push(
-        `npx --yes @hypermod/cli -t ${entryFilePath} --parser ${
-          transform.parser || "tsx"
+        `hypermod -t ${entryFilePath} --parser ${
+          entry.transform.parser || "tsx"
         } ./`
       );
     }
-  );
+
+    core.warning(`Unsupported transform type: ${entry.type}. Skipping...`);
+  });
 
   for (const command of commands) {
     try {
