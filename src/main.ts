@@ -192,7 +192,7 @@ export default async function main() {
 
   await exec("bash", [
     "-c",
-    `git status --porcelain | awk '{print substr($0, 4)}' | xargs -r npx prettier --write`,
+    `git status --porcelain | awk '{print substr($0, 4)}' | grep -E '\\.(ts|tsx|js|jsx)$' | xargs -r npx prettier --write`,
   ]);
 
   await commitAll(`@hypermod ${deployment.title}`);
