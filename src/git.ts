@@ -51,8 +51,3 @@ export const status = async () => {
   const { stdout } = await getExecOutput("git", ["status", "--porcelain"]);
   return stdout;
 };
-
-export const checkIfClean = async () => {
-  const stdout = await status();
-  return !stdout.length;
-};
