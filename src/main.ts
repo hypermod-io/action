@@ -102,6 +102,9 @@ export default async function main() {
 
   const deployment: Deployment = await deploymentRes.json();
 
+  // TODO DELETE ME
+  core.info(`Deployment response:\n${JSON.stringify(deployment, null, 2)}`);
+
   core.info(
     `@hypermod: Fetching transform source files: ${Object.keys(
       deployment.transforms
