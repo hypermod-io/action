@@ -137,9 +137,14 @@ export default async function main() {
 
     // Handle transforms
     if (isTransformEntry(entry)) {
-      const transformEntry = entry.transform.sources.find(
-        ({ name }) => name === "transform.ts" || name === "transform.js"
-      );
+      console.log(entry.transform.sources);
+
+      const transformEntry = entry.transform.sources.find(({ name }) => {
+        console.log(name, name === "transform.ts" || name === "transform.js");
+        return name === "transform.ts" || name === "transform.js";
+      });
+
+      console.log(transformEntry);
 
       if (!transformEntry) {
         core.warning(
