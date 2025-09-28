@@ -137,9 +137,14 @@ export default async function main() {
 
     // Handle transforms
     if (isTransformEntry(entry)) {
-      const transformEntry = entry.transform.sources.find(
-        ({ name }) => name === "transform.ts" || name === "transform.js"
-      );
+      console.log(entry.transform.sources);
+
+      const transformEntry = entry.transform.sources.find(({ name }) => {
+        console.log(name, name === "transform.ts" || name === "transform.js");
+        return name === "transform.ts" || name === "transform.js";
+      });
+
+      console.log(transformEntry);
 
       if (!transformEntry) {
         core.warning(
@@ -192,7 +197,7 @@ export default async function main() {
 
   await exec("bash", [
     "-c",
-    `git status --porcelain | awk '{print substr($0, 4)}' | xargs -r npx prettier --write`,
+    `git status --porcelain | awk '{print substr($0, 4)}' | grep -E '\\.(ts|tsx|js|jsx)$' | xargs -r npx prettier --write`,
   ]);
 
   await commitAll(`@hypermod ${deployment.title}`);

@@ -8,9 +8,13 @@ inputs:
     description: "The ID of the deployment to run"
     type: string
     required: true
+  deploymentKey:
+    description: "The deployment secret key which authorizes the action to run the deployment"
+    type: string
+    required: true
 outputs:
   pullRequestNumbers:
-    description: "The pull request number that was created or updated (comma separated)"
+    description: "The pull request number(s) created or updated (comma separated)"
 branding:
   icon: "star"
   color: "black"

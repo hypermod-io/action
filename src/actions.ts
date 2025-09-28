@@ -23,7 +23,7 @@ export function resolveAction(
     case "file-delete":
       return `rm ${args["file-path"]}`;
     case "file-create":
-      return `echo "${args["file-content"]}" > ${args["file-path"]}`;
+      return `cat > ${args["file-path"]} << 'EOF'\n${args["file-content"]}\nEOF`;
     case "file-move":
       return `mv ${args["source-path"]} ${args["destination-path"]}`;
     case "folder-create":
