@@ -137,14 +137,10 @@ export default async function main() {
 
     // Handle transforms
     if (isTransformEntry(entry)) {
-      console.log(entry.transform.sources);
-
       const transformEntry = entry.transform.sources.find(({ name }) => {
-        console.log(name, name === "transform.ts" || name === "transform.js");
-        return name === "transform.ts" || name === "transform.js";
+        const cleanName = name.split("/").pop();
+        return cleanName === "transform.ts" || cleanName === "transform.js";
       });
-
-      console.log(transformEntry);
 
       if (!transformEntry) {
         core.warning(
@@ -165,6 +161,8 @@ export default async function main() {
           entry.transform.parser || "tsx"
         } ./`
       );
+
+      return;
     }
 
     core.warning(`Unsupported transform type: ${entry.type}. Skipping...`);
@@ -188,7 +186,7 @@ export default async function main() {
   const diffs = await status();
 
   if (!Boolean(diffs.length)) {
-    core.info("@hypermod: No changes detected\n");
+    core.warning("@hypermod: No changes detected\n");
     return;
   }
 

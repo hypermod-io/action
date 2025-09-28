@@ -182,6 +182,73 @@ describe("GitHub Action Workflow", () => {
     );
   });
 
+  it("should write transform source files with / prefixed source name", async () => {
+    const deploymentWithPrefixedSourceName: Deployment = {
+      ...mockDeployment,
+      transforms: [
+        {
+          // Transform on deployment
+          deploymentId: "test-deployment-id",
+          transformId: "transform123",
+          actionId: undefined,
+          action: undefined,
+          type: "TRANSFORM",
+          arguments: [],
+          transform: {
+            // Transform details
+            id: "transform123",
+            parser: "tsx",
+            deploymentId: "transform123",
+            transformId: "transform123",
+            sources: [
+              {
+                id: "test-id-1",
+                name: "/transform.js",
+                code: "console.log('test');",
+              },
+            ],
+          },
+        },
+      ],
+    };
+
+    vi.mocked(exec.getExecOutput)
+      // install ni
+      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "" })
+      // install deps
+      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "" })
+      // run transform
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stderr: "",
+        stdout: "Transform executed",
+      });
+
+    const fetchDeploymentDataMock = vi.fn().mockImplementation(() =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(deploymentWithPrefixedSourceName),
+      })
+    );
+
+    vi.stubGlobal("fetch", fetchDeploymentDataMock);
+
+    await main();
+
+    expect(fs.outputFileSync).toHaveBeenCalledWith(
+      expect.stringContaining(".hypermod/transform123/transform.js"),
+      "console.log('test');"
+    );
+    expect(core.warning).not.toHaveBeenCalled();
+
+    expect(exec.getExecOutput).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /^hypermod -t .*\/.hypermod\/transform123\/transform.js --parser tsx (\.\/|\.)$/i
+      )
+    );
+  });
+
   it("should formulate and execute the correct TRANSFORM cli commands", async () => {
     vi.mocked(exec.getExecOutput)
       // install ni
@@ -247,7 +314,9 @@ describe("GitHub Action Workflow", () => {
 
     await main();
 
-    expect(core.info).toHaveBeenCalledWith("@hypermod: No changes detected\n");
+    expect(core.warning).toHaveBeenCalledWith(
+      "@hypermod: No changes detected\n"
+    );
   });
 
   it("should create a new pull request if none exists", async () => {
