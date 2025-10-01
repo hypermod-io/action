@@ -1,27 +1,20 @@
 name: Hypermod
-description: A GitHub action to perform transformations triggered via the Hypermod App
+description: A GitHub action to perform batch transformations triggered via the Hypermod App
 runs:
   using: "node20"
   main: "dist/index.js"
 inputs:
-  eventType:
-    description: "Event type dispatched from the Hypermod app"
-    type: choice
-    required: true
-    options:
-      - transform
-      - check
-  transformIds:
-    description: "Transform Ids to run (comma separated)"
+  deploymentId:
+    description: "The ID of the deployment to run"
     type: string
     required: true
-  directories:
-    description: "Directories Ids to run (comma separated)"
+  deploymentKey:
+    description: "The deployment secret key which authorizes the action to run the deployment"
     type: string
     required: true
 outputs:
   pullRequestNumbers:
-    description: "The pull request number that was created or updated (comma separated)"
+    description: "The pull request number(s) created or updated (comma separated)"
 branding:
   icon: "star"
   color: "black"

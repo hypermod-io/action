@@ -1,6 +1,5 @@
 # Hypermod Transformer Action
-Github Action for progressing remote transformation requests triggered from the Hypermod App.
 
+Github Action for progressing batch transformation requests triggered remotely from the Hypermod App.
 
-## Running locally
-https://blog.harshcasper.com/debugging-github-actions-workflows-effectively
+The action accepts a single argument `deploymentId` & `deploymentKey`, which it will use to access specific transform instructions from the Hypermod App.

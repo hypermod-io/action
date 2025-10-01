@@ -3,6 +3,8 @@
   "version": "1.0.0",
   "main": "dist/index.js",
   "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
     "build": "ncc build src/index.ts -o dist --transpile-only --minify"
   },
   "engines": {
@@ -17,8 +19,9 @@
   },
   "devDependencies": {
     "@types/fs-extra": "^8.0.0",
-    "@types/node": "^12.7.1",
+    "@types/node": "^24.0.4",
     "@vercel/ncc": "^0.36.1",
-    "typescript": "^5.0.4"
+    "typescript": "^5.0.4",
+    "vitest": "^3.2.4"
   }
 }
